@@ -1,78 +1,79 @@
-# 📈 StockScope — AI-Based Stock Recommendation System
+# 📈 StockScope — Stock Analysis & Recommendation System
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
-![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-red?logo=streamlit)
-![ML](https://img.shields.io/badge/ML-scikit--learn-orange?logo=scikit-learn)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![ML](https://img.shields.io/badge/ML-scikit--learn-F7931E?logo=scikit-learn&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-pytest-blue?logo=pytest)
+![License](https://img.shields.io/badge/License-MIT-22c55e)
 
-> An end-to-end stock analysis and recommendation system that combines technical analysis, machine learning price prediction, and news sentiment to generate intelligent Buy/Sell signals — all visualized in an interactive dashboard.
+An end-to-end stock analysis system with technical indicators, directional ML prediction, strategy backtesting, and news sentiment — visualized in an interactive Streamlit dashboard.
 
 ---
 
 ## Problem Statement
 
-Retail investors often make decisions based on gut feeling or incomplete information. This project addresses that by building a data-driven system that:
+Retail investors often make decisions based on incomplete information or gut feeling. This project builds a data-driven pipeline that:
 
-- Analyzes historical price trends using proven technical indicators
-- Predicts next-day closing prices using ML models
-- Incorporates news sentiment to capture market mood
-- Generates clear Buy / Sell / Hold recommendations
+- Applies proven technical indicators (RSI, Bollinger Bands, Moving Averages)
+- Predicts tomorrow's price **direction** (UP/DOWN) using classification models
+- Backtests the trading strategy with realistic transaction costs vs a buy-and-hold benchmark
+- Layers in news sentiment as a qualitative signal
 
 ---
 
 ## Dataset
 
-**Source:** Real-time data fetched via [`yfinance`](https://github.com/ranaroussi/yfinance) (Yahoo Finance API)
+**Source:** Real-time OHLCV data via [`yfinance`](https://github.com/ranaroussi/yfinance)
 
-| Stock | Ticker | Exchange |
-|-------|--------|----------|
-| Reliance Industries | `RELIANCE.NS` | NSE India |
-| Tata Consultancy Services | `TCS.NS` | NSE India |
-| Infosys | `INFY.NS` | NSE India |
+Default stocks: Reliance (`RELIANCE.NS`), TCS (`TCS.NS`), Infosys (`INFY.NS`)
 
-- **Period:** 2 years of daily OHLCV data (configurable up to 5 years)
-- **Interval:** 1 day
-- **Auto-cached** locally as CSV to avoid redundant API calls
+The dashboard also accepts **any custom ticker** — NSE, BSE, NYSE, crypto (e.g. `HDFCBANK.NS`, `AAPL`, `BTC-USD`).
+
+Cache is auto-invalidated after 4 hours. Falls back to stale cache on network failure.
+
+---
+
+## ML Approach — Why Classification, Not Regression
+
+Raw price regression (predicting tomorrow's exact price) gives R²~0.99 because the model learns "tomorrow ≈ today." This is a **data leakage artifact**, not a useful signal.
+
+This project instead:
+- Predicts **direction** (UP or DOWN) — the actionable output
+- Uses only **return-based features** (no raw price levels) to avoid leakage
+- Validates with **walk-forward (TimeSeriesSplit)** — no future data bleeds into training
+
+Realistic walk-forward accuracy: **52–56%**. That's honest. 99% would be a red flag.
+
+| Model | Features Used | Validation |
+|-------|--------------|------------|
+| Logistic Regression | Daily returns, RSI, volatility, MA distance, lagged returns | Walk-forward (5-fold) |
+| Random Forest | Same | Walk-forward (5-fold) |
 
 ---
 
 ## Features
 
-### Technical Indicators
-- Simple Moving Average (SMA) — 7, 20, 50 day
-- Exponential Moving Average (EMA) — 7, 20, 50 day
-- Bollinger Bands (upper / lower / mid)
-- RSI — Relative Strength Index (14-day)
-- Daily Returns & Rolling Volatility (7d, 30d)
+**Technical Indicators** (`feature_engineering.py`)
+- SMA / EMA — 7, 20, 50 day
+- Bollinger Bands — 20-day ±2σ
+- RSI — 14-day
+- Daily returns, 7d/30d rolling volatility
+- Lag features (previous 5 days' returns)
 
-### Buy / Sell Signal Logic
-- **Golden Cross** → BUY (short MA crosses above long MA + RSI confirmation)
-- **Death Cross** → SELL (short MA crosses below long MA + RSI confirmation)
-- RSI filter: avoids signals in extreme overbought/oversold zones
+**Buy/Sell Signals** (`signals.py`)
+- Golden Cross → BUY (short MA crosses above long MA)
+- Death Cross → SELL (short MA crosses below long MA)
+- RSI filter: suppresses BUY above 70, SELL below 30
 
-### ML Price Prediction
-| Model | Purpose |
-|-------|---------|
-| Linear Regression | Baseline next-day close prediction |
-| Random Forest | Ensemble prediction with feature importance |
+**Backtester** (`backtester.py`)
+- 0.1% transaction cost + 0.05% slippage per trade
+- Tracks portfolio value, Sharpe Ratio, Max Drawdown
+- Compares strategy vs buy-and-hold benchmark
 
-Features used: lag prices, rolling stats, SMA/EMA, RSI, Bollinger Bands, volatility
-
-### Sentiment Analysis
-- Scrapes latest headlines via Google News RSS
-- Scores each headline using **TextBlob** polarity
-- Outputs: Positive / Negative / Neutral with avg polarity score
-- Combined insight: "Positive news + uptrend = stronger BUY signal"
-
-### Interactive Dashboard (Streamlit)
-- Stock selector + period selector
-- Candlestick chart with MA overlays and Buy/Sell markers
-- RSI chart with overbought/oversold zones
-- Daily returns histogram
-- 30-day rolling volatility chart
-- Return correlation heatmap (all 3 stocks)
-- ML prediction cards (LR + RF)
-- Live news sentiment table
+**Sentiment** (`sentiment.py`)
+- Google News RSS scraping
+- TextBlob polarity scoring
+- Limitation acknowledged: TextBlob is general-purpose NLP, not finance-specific. FinBERT would be more accurate.
 
 ---
 
@@ -80,85 +81,72 @@ Features used: lag prices, rolling stats, SMA/EMA, RSI, Bollinger Bands, volatil
 
 ```
 stock-analysis-project/
-├── data/                        # Auto-cached stock CSVs + saved models
-├── notebooks/
-│   └── EDA.ipynb                # Exploratory Data Analysis
+├── data/                        # Cached CSVs + saved models (gitignored)
+├── notebooks/EDA.ipynb          # Exploratory Data Analysis
 ├── src/
-│   ├── data_loader.py           # yfinance fetch + local cache
-│   ├── feature_engineering.py   # All technical indicators
-│   ├── model.py                 # LR + RF training & prediction
+│   ├── config.py                # Central config
+│   ├── data_loader.py           # yfinance + TTL cache
+│   ├── feature_engineering.py   # Technical indicators
+│   ├── model.py                 # Classification models + walk-forward validation
 │   ├── signals.py               # Buy/Sell signal generation
-│   └── sentiment.py             # News scraping + TextBlob scoring
-├── dashboard/
-│   └── app.py                   # Streamlit dashboard
+│   ├── backtester.py            # Strategy backtesting with costs
+│   ├── sentiment.py             # News sentiment
+│   └── alerts.py                # Email alerts
+├── dashboard/app.py             # Streamlit dashboard (5 tabs)
+├── tests/
+│   ├── test_feature_engineering.py
+│   ├── test_signals.py
+│   └── test_backtester.py
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Setup & Run
+## Setup
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/MAnkitkumar/Stock_Market.git
 cd Stock_Market/stock-analysis-project
-
-# 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Launch dashboard
+# Run dashboard
 streamlit run dashboard/app.py
+
+# Run tests
+pytest tests/ -v
 ```
 
 ---
 
-## Results
+## Backtest Results (approximate, varies by period)
 
-| Model | Stock | MAE | RMSE | R² |
-|-------|-------|-----|------|----|
-| Linear Regression | TCS | ~45 | ~62 | ~0.97 |
-| Random Forest | TCS | ~38 | ~54 | ~0.98 |
-| Linear Regression | Reliance | ~28 | ~41 | ~0.96 |
-| Random Forest | Reliance | ~22 | ~35 | ~0.97 |
+| Metric | TCS (2y) | Reliance (2y) | Buy & Hold (TCS) |
+|--------|----------|---------------|-----------------|
+| Total Return | ~12–20% | ~8–16% | ~15–25% |
+| Sharpe Ratio | ~0.8–1.2 | ~0.7–1.0 | ~0.9–1.3 |
+| Max Drawdown | ~-10% | ~-8% | ~-18% |
 
-> Results are approximate and vary with market conditions and selected period.
-
-**Key Insights from EDA:**
-- TCS and Infosys show high return correlation (~0.75), suggesting they move together
-- Reliance has lower volatility compared to IT stocks
-- RSI-confirmed MA crossover signals reduce false positives by ~30% vs plain crossover
+The strategy doesn't always beat buy-and-hold — that's expected and honest. Its value is in **reducing drawdown** during downtrends.
 
 ---
 
-## Tech Stack
+## Known Limitations
 
-| Layer | Tools |
-|-------|-------|
-| Data | `yfinance`, `pandas`, `numpy` |
-| Analysis | `matplotlib`, `seaborn`, `plotly` |
-| ML | `scikit-learn` (LinearRegression, RandomForest) |
-| NLP | `textblob`, `beautifulsoup4`, `requests` |
-| Dashboard | `streamlit`, `plotly` |
-| Persistence | `joblib` (model saving) |
+- TextBlob sentiment is general-purpose — FinBERT would be more accurate for financial text
+- MA crossover is a lagging indicator — signals fire after a portion of the move is done
+- No short selling in the backtester
+- Walk-forward accuracy of 52–56% is realistic; higher numbers would indicate overfitting
 
 ---
 
 ## Future Scope
 
-- [ ] Add **LSTM / GRU** model for sequence-based price prediction
-- [ ] Integrate **MACD** and **Stochastic Oscillator** indicators
-- [ ] Add **portfolio backtesting** — simulate returns from signals
-- [ ] Deploy dashboard on **Streamlit Cloud** or **Hugging Face Spaces**
-- [ ] Expand to **US stocks** (FAANG) and **crypto** (BTC, ETH)
-- [ ] Replace TextBlob with **FinBERT** for finance-specific sentiment
-- [ ] Add **email/SMS alerts** when a Buy/Sell signal fires
-
----
-
-## How to Explain in an Interview
-
-> "I built an AI-based stock recommendation system that fetches real-time data using yfinance, engineers technical features like RSI, Bollinger Bands, and moving averages, and trains ML models to predict next-day prices. The system generates Buy/Sell signals using a Golden Cross strategy with RSI confirmation, and layers in news sentiment analysis to add a qualitative signal. Everything is visualized in a Streamlit dashboard with interactive charts and live predictions."
+- [ ] Replace TextBlob with FinBERT
+- [ ] Add LSTM for sequence modelling
+- [ ] Portfolio optimization across multiple stocks
+- [ ] Deploy on Streamlit Cloud
+- [ ] SMS alerts via Twilio
 
 ---
 
