@@ -3,7 +3,8 @@ app.py — StockScope Streamlit Dashboard
 Run: streamlit run dashboard/app.py
 """
 
-import sys, os
+import sys, os, time
+from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import streamlit as st
@@ -42,8 +43,18 @@ with st.sidebar:
     run_model = st.checkbox("Train / Refresh ML Models", value=False)
 
     st.markdown("---")
-    live_mode = st.checkbox("🔴 Live refresh (60s)", value=False,
-                            help="Auto-refreshes during market hours. Uses 1-min candles for 1d period.")
+    live_mode     = st.checkbox("🔴 Live refresh (60s)", value=False,
+                                help="Auto-refreshes every 60s. Use with 1d/5d period for intraday candles.")
+    refresh_secs  = 60
+    if live_mode:
+        # Show a live countdown so the user knows it's working
+        placeholder = st.empty()
+        for remaining in range(refresh_secs, 0, -1):
+            placeholder.caption(f"Next refresh in {remaining}s...")
+            time.sleep(1)
+        placeholder.caption("Refreshing...")
+        st.cache_data.clear()   # bust cache so fresh data is fetched
+        st.rerun()
     st.caption("Supports any Yahoo Finance ticker")
 
 # ── Load & process ────────────────────────────────────────────────────────────
@@ -74,6 +85,10 @@ c1.metric("Latest Close",   f"₹{latest_close:,.2f}", f"{change_pct:+.2f}%")
 c2.metric("RSI (14)",       f"{rsi_now:.1f}",         help="<30 oversold · >70 overbought")
 c3.metric("30d Volatility", f"{vol_30:.2f}%")
 c4.metric("Last Signal",    latest_signal(df).split(" ")[0])
+
+# show last data timestamp
+last_ts = df.index[-1]
+st.caption(f"Last data point: {last_ts}  ·  Fetched at: {datetime.now().strftime('%H:%M:%S')}")
 
 # ── Recommendation Banner ─────────────────────────────────────────────────────
 icon = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}.get(rec["action"], "⚪")
@@ -278,10 +293,3 @@ with tab5:
 
 st.markdown("---")
 st.caption("StockScope · Not financial advice · Data: Yahoo Finance")
-
-# ── Live auto-refresh ─────────────────────────────────────────────────────────
-if live_mode:
-    import time
-    st.toast("Live mode active — refreshing every 60s", icon="🔴")
-    time.sleep(60)
-    st.rerun()

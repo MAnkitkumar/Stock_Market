@@ -39,34 +39,38 @@ def fetch_stock_data(ticker: str, period: str = "2y", interval: str = "1d",
                      force_refresh: bool = False) -> pd.DataFrame:
     """
     Fetch OHLCV data for a given ticker from Yahoo Finance.
-    Caches result as CSV. Cache is invalidated after CACHE_TTL_HOURS hours.
+    - Daily data: cached to CSV with 4-hour TTL
+    - Intraday (1m, 5m): never cached — always fetched live
 
     Args:
         ticker:        Yahoo Finance ticker symbol (e.g. 'TCS.NS')
         period:        Data period — '1y', '2y', '5y', etc.
-        interval:      Data interval — '1d', '1wk', etc.
+        interval:      Data interval — '1d', '1m', '5m', etc.
         force_refresh: Bypass cache and re-fetch regardless of TTL.
 
     Returns:
         DataFrame with columns: Open, High, Low, Close, Volume
     """
     ensure_data_dir()
-    path = _cache_path(ticker, period)
 
-    if not force_refresh and not _is_cache_stale(path):
-        df = pd.read_csv(path, index_col=0, parse_dates=True)
-        print(f"[cache] Loaded {ticker} (fresh cache)")
-        return df
+    # Intraday intervals — never cache, always live
+    intraday = interval in ("1m", "2m", "5m", "15m", "30m", "60m", "90m")
 
-    print(f"[fetch] Downloading {ticker} ({period}) ...")
+    if not intraday:
+        path = _cache_path(ticker, period)
+        if not force_refresh and not _is_cache_stale(path):
+            df = pd.read_csv(path, index_col=0, parse_dates=True)
+            print(f"[cache] Loaded {ticker} (fresh cache)")
+            return df
+
+    print(f"[fetch] Downloading {ticker} ({period}, {interval}) ...")
     try:
         df = yf.download(ticker, period=period, interval=interval,
                          auto_adjust=True, progress=False)
     except Exception as e:
-        # Fallback to stale cache if network fails
-        if os.path.exists(path):
+        if not intraday and os.path.exists(_cache_path(ticker, period)):
             print(f"[fetch] Network error ({e}). Using stale cache.")
-            return pd.read_csv(path, index_col=0, parse_dates=True)
+            return pd.read_csv(_cache_path(ticker, period), index_col=0, parse_dates=True)
         raise
 
     if df.empty:
@@ -75,8 +79,11 @@ def fetch_stock_data(ticker: str, period: str = "2y", interval: str = "1d",
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    df.to_csv(path)
-    print(f"[fetch] Saved {ticker} → {path}")
+    # Only persist daily data to disk
+    if not intraday:
+        df.to_csv(_cache_path(ticker, period))
+        print(f"[fetch] Saved {ticker} → {_cache_path(ticker, period)}")
+
     return df
 
 
