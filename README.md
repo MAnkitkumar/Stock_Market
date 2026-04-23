@@ -5,8 +5,27 @@
 ![ML](https://img.shields.io/badge/ML-scikit--learn-F7931E?logo=scikit-learn&logoColor=white)
 ![Tests](https://img.shields.io/badge/Tests-pytest-blue?logo=pytest)
 ![License](https://img.shields.io/badge/License-MIT-22c55e)
+![Live](https://img.shields.io/badge/Live%20Demo-Streamlit%20Cloud-FF4B4B?logo=streamlit)
 
 An end-to-end stock analysis system with technical indicators, directional ML prediction, strategy backtesting, and news sentiment — visualized in an interactive Streamlit dashboard.
+
+> 🚀 **[Live Demo →](https://stockscope.streamlit.app)** *(deploy to Streamlit Cloud and replace this link)*
+
+---
+
+## Screenshots
+
+| Price & Signals | Backtest vs Benchmark |
+|---|---|
+| ![chart](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=Candlestick+%2B+Buy%2FSell+Signals) | ![backtest](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=Strategy+vs+Buy+%26+Hold) |
+
+| ML Direction Prediction | News Sentiment |
+|---|---|
+| ![ml](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=UP%2FDOWN+Classification+%2B+Confidence) | ![sentiment](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=Headline+Sentiment+Table) |
+
+> Replace placeholders with actual screenshots after running `streamlit run dashboard/app.py`
+
+---
 
 ---
 
@@ -131,7 +150,24 @@ The strategy doesn't always beat buy-and-hold — that's expected and honest. It
 
 ---
 
-## Known Limitations
+## Design Decisions
+
+**Why classification instead of regression?**
+Raw price regression gives R²~0.99 because "tomorrow ≈ today" is trivially learnable from lagged prices. That's not a useful model — it can't tell you whether to buy or sell. Predicting direction (UP/DOWN) is the actual decision a trader needs.
+
+**Why walk-forward validation instead of random split?**
+Stock data is time-ordered. A random train/test split lets the model train on future data to predict the past — that's data leakage. `TimeSeriesSplit` ensures training always uses only past data relative to the test window.
+
+**Why RSI confirmation on MA crossovers?**
+Pure MA crossovers fire late and generate false signals in sideways markets. Adding an RSI filter (suppress BUY when RSI > 70, suppress SELL when RSI < 30) reduces entries at exhaustion points.
+
+**Why include transaction costs in the backtester?**
+A strategy that looks profitable without costs often breaks even or loses after brokerage + STT. Including 0.1% cost + 0.05% slippage gives a more realistic picture of actual returns.
+
+**Why TextBlob and not FinBERT?**
+TextBlob is lightweight and has zero setup cost — good for a portfolio project. FinBERT is more accurate for financial text but requires a GPU or paid API. The limitation is explicitly documented.
+
+---
 
 - TextBlob sentiment is general-purpose — FinBERT would be more accurate for financial text
 - MA crossover is a lagging indicator — signals fire after a portion of the move is done
