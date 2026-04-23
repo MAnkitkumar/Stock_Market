@@ -35,22 +35,26 @@ with st.sidebar:
         stock_name = st.selectbox("Select Stock", list(DEFAULT_STOCKS.keys()))
         ticker     = DEFAULT_STOCKS[stock_name]
 
-    period    = st.selectbox("Period", ["6mo", "1y", "2y", "5y"], index=2)
+    period    = st.selectbox("Period", ["1d", "5d", "1mo", "6mo", "1y", "2y", "5y"], index=5)
+    interval  = "1m" if period == "1d" else ("5m" if period == "5d" else "1d")
     short_ma  = st.slider("Short MA (days)", 5, 50, 20)
     long_ma   = st.slider("Long MA (days)", 20, 200, 50)
     run_model = st.checkbox("Train / Refresh ML Models", value=False)
+
     st.markdown("---")
+    live_mode = st.checkbox("🔴 Live refresh (60s)", value=False,
+                            help="Auto-refreshes during market hours. Uses 1-min candles for 1d period.")
     st.caption("Supports any Yahoo Finance ticker")
 
 # ── Load & process ────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600)
-def load_data(ticker, period):
-    raw = fetch_stock_data(ticker, period=period)
+@st.cache_data(ttl=60)
+def load_data(ticker, period, interval):
+    raw = fetch_stock_data(ticker, period=period, interval=interval, force_refresh=(interval != "1d"))
     return build_features(raw)
 
 try:
     with st.spinner(f"Fetching {stock_name} data..."):
-        df         = load_data(ticker, period)
+        df         = load_data(ticker, period, interval)
         df         = generate_ma_signals(df, short=short_ma, long=long_ma)
         signals_df = get_signal_summary(df)
         rec        = get_recommendation(df)
@@ -274,3 +278,10 @@ with tab5:
 
 st.markdown("---")
 st.caption("StockScope · Not financial advice · Data: Yahoo Finance")
+
+# ── Live auto-refresh ─────────────────────────────────────────────────────────
+if live_mode:
+    import time
+    st.toast("Live mode active — refreshing every 60s", icon="🔴")
+    time.sleep(60)
+    st.rerun()
