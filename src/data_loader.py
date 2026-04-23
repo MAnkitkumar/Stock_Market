@@ -1,90 +1,101 @@
 """
 data_loader.py
-Fetches historical stock data using yfinance and caches it locally.
+Fetches historical stock data using yfinance with TTL-based cache invalidation.
+Cache is considered stale after CACHE_TTL_HOURS and auto-refreshed.
 """
 
 import os
+import time
 import yfinance as yf
 import pandas as pd
 
-# Default stocks (NSE-listed Indian stocks)
 DEFAULT_STOCKS = {
     "Reliance": "RELIANCE.NS",
-    "TCS": "TCS.NS",
-    "Infosys": "INFY.NS",
+    "TCS":      "TCS.NS",
+    "Infosys":  "INFY.NS",
 }
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR       = os.path.join(os.path.dirname(__file__), "..", "data")
+CACHE_TTL_HOURS = 4   # refresh cache if older than this
 
 
 def ensure_data_dir():
     os.makedirs(DATA_DIR, exist_ok=True)
 
 
-def fetch_stock_data(ticker: str, period: str = "2y", interval: str = "1d") -> pd.DataFrame:
+def _cache_path(ticker: str, period: str) -> str:
+    return os.path.join(DATA_DIR, f"{ticker.replace('.', '_')}_{period}.csv")
+
+
+def _is_cache_stale(path: str) -> bool:
+    """Returns True if cache file doesn't exist or is older than CACHE_TTL_HOURS."""
+    if not os.path.exists(path):
+        return True
+    age_hours = (time.time() - os.path.getmtime(path)) / 3600
+    return age_hours > CACHE_TTL_HOURS
+
+
+def fetch_stock_data(ticker: str, period: str = "2y", interval: str = "1d",
+                     force_refresh: bool = False) -> pd.DataFrame:
     """
     Fetch OHLCV data for a given ticker from Yahoo Finance.
-    Caches result as CSV to avoid repeated API calls.
+    Caches result as CSV. Cache is invalidated after CACHE_TTL_HOURS hours.
 
     Args:
-        ticker:   Yahoo Finance ticker symbol (e.g. 'TCS.NS')
-        period:   Data period — '1y', '2y', '5y', etc.
-        interval: Data interval — '1d', '1wk', etc.
+        ticker:        Yahoo Finance ticker symbol (e.g. 'TCS.NS')
+        period:        Data period — '1y', '2y', '5y', etc.
+        interval:      Data interval — '1d', '1wk', etc.
+        force_refresh: Bypass cache and re-fetch regardless of TTL.
 
     Returns:
         DataFrame with columns: Open, High, Low, Close, Volume
     """
     ensure_data_dir()
-    cache_path = os.path.join(DATA_DIR, f"{ticker.replace('.', '_')}_{period}.csv")
+    path = _cache_path(ticker, period)
 
-    if os.path.exists(cache_path):
-        df = pd.read_csv(cache_path, index_col=0, parse_dates=True)
-        print(f"[cache] Loaded {ticker} from {cache_path}")
+    if not force_refresh and not _is_cache_stale(path):
+        df = pd.read_csv(path, index_col=0, parse_dates=True)
+        print(f"[cache] Loaded {ticker} (fresh cache)")
         return df
 
     print(f"[fetch] Downloading {ticker} ({period}) ...")
-    df = yf.download(ticker, period=period, interval=interval, auto_adjust=True, progress=False)
+    try:
+        df = yf.download(ticker, period=period, interval=interval,
+                         auto_adjust=True, progress=False)
+    except Exception as e:
+        # Fallback to stale cache if network fails
+        if os.path.exists(path):
+            print(f"[fetch] Network error ({e}). Using stale cache.")
+            return pd.read_csv(path, index_col=0, parse_dates=True)
+        raise
 
     if df.empty:
         raise ValueError(f"No data returned for ticker: {ticker}")
 
-    # Flatten MultiIndex columns if present
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    df.to_csv(cache_path)
-    print(f"[fetch] Saved to {cache_path}")
+    df.to_csv(path)
+    print(f"[fetch] Saved {ticker} → {path}")
     return df
 
 
 def load_multiple(tickers: dict = None, period: str = "2y") -> dict:
-    """
-    Load data for multiple tickers.
-
-    Args:
-        tickers: dict of {name: ticker_symbol}. Defaults to DEFAULT_STOCKS.
-        period:  Data period string.
-
-    Returns:
-        dict of {name: DataFrame}
-    """
+    """Load data for multiple tickers. Accepts any {name: ticker} dict."""
     if tickers is None:
         tickers = DEFAULT_STOCKS
+    return {name: fetch_stock_data(sym, period=period) for name, sym in tickers.items()}
 
-    return {name: fetch_stock_data(symbol, period=period) for name, symbol in tickers.items()}
 
-
-def refresh_cache(ticker: str, period: str = "2y"):
-    """Delete cached file and re-fetch fresh data."""
-    cache_path = os.path.join(DATA_DIR, f"{ticker.replace('.', '_')}_{period}.csv")
-    if os.path.exists(cache_path):
-        os.remove(cache_path)
-        print(f"[cache] Cleared cache for {ticker}")
-    return fetch_stock_data(ticker, period=period)
+def search_ticker(query: str) -> str:
+    """
+    Basic helper — returns the query as-is (yfinance accepts any valid ticker).
+    Users can type any NSE/BSE/NYSE ticker directly.
+    """
+    return query.strip().upper()
 
 
 if __name__ == "__main__":
     data = load_multiple()
     for name, df in data.items():
-        print(f"\n{name}: {df.shape}")
-        print(df.tail(3))
+        print(f"{name}: {df.shape}  last={df.index[-1].date()}")
