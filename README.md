@@ -1,31 +1,31 @@
 # 📈 StockScope — Stock Analysis & Recommendation System
 
+> End-to-end stock analysis: technical indicators · directional ML prediction · strategy backtesting · news sentiment
+
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![ML](https://img.shields.io/badge/ML-scikit--learn-F7931E?logo=scikit-learn&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-pytest-blue?logo=pytest)
+![Tests](https://img.shields.io/badge/Tests-pytest-4CAF50?logo=pytest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-22c55e)
-![Live](https://img.shields.io/badge/Live%20Demo-Streamlit%20Cloud-FF4B4B?logo=streamlit)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit%20Cloud-FF4B4B?logo=streamlit&logoColor=white)](https://stockscope.streamlit.app)
 
-An end-to-end stock analysis system with technical indicators, directional ML prediction, strategy backtesting, and news sentiment — visualized in an interactive Streamlit dashboard.
-
-> 🚀 **[Live Demo →](https://stockscope.streamlit.app)** *(deploy to Streamlit Cloud and replace this link)*
+🚀 **[Live Demo → stockscope.streamlit.app](https://stockscope.streamlit.app)**
 
 ---
 
-## Screenshots
+## Dashboard Preview
 
-| Price & Signals | Backtest vs Benchmark |
+| Price & Signals | Indicators |
 |---|---|
-| ![chart](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=Candlestick+%2B+Buy%2FSell+Signals) | ![backtest](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=Strategy+vs+Buy+%26+Hold) |
+| ![Price & Signals](docs/screenshots/Screenshot%202026-04-24%20191149.png) | ![Indicators](docs/screenshots/Screenshot%202026-04-24%20191207.png) |
 
-| ML Direction Prediction | News Sentiment |
+| ML Direction Prediction | Backtest vs Buy & Hold |
 |---|---|
-| ![ml](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=UP%2FDOWN+Classification+%2B+Confidence) | ![sentiment](https://via.placeholder.com/500x300/1a1a2e/ffffff?text=Headline+Sentiment+Table) |
+| ![ML Prediction](docs/screenshots/Screenshot%202026-04-24%20191228.png) | ![Backtest](docs/screenshots/Screenshot%202026-04-24%20191503.png) |
 
-> Replace placeholders with actual screenshots after running `streamlit run dashboard/app.py`
-
----
+| News Sentiment |
+|---|
+| ![Sentiment](docs/screenshots/Screenshot%202026-04-24%20191518.png) |
 
 ---
 
@@ -34,7 +34,7 @@ An end-to-end stock analysis system with technical indicators, directional ML pr
 Retail investors often make decisions based on incomplete information or gut feeling. This project builds a data-driven pipeline that:
 
 - Applies proven technical indicators (RSI, Bollinger Bands, Moving Averages)
-- Predicts tomorrow's price **direction** (UP/DOWN) using classification models
+- Predicts tomorrow's price **direction** (UP/DOWN) using classification — not raw price regression
 - Backtests the trading strategy with realistic transaction costs vs a buy-and-hold benchmark
 - Layers in news sentiment as a qualitative signal
 
@@ -44,29 +44,45 @@ Retail investors often make decisions based on incomplete information or gut fee
 
 **Source:** Real-time OHLCV data via [`yfinance`](https://github.com/ranaroussi/yfinance)
 
-Default stocks: Reliance (`RELIANCE.NS`), TCS (`TCS.NS`), Infosys (`INFY.NS`)
+Default tickers: Reliance (`RELIANCE.NS`), TCS (`TCS.NS`), Infosys (`INFY.NS`)
 
-The dashboard also accepts **any custom ticker** — NSE, BSE, NYSE, crypto (e.g. `HDFCBANK.NS`, `AAPL`, `BTC-USD`).
+The dashboard accepts **any Yahoo Finance ticker** — NSE, BSE, NYSE, crypto (e.g. `HDFCBANK.NS`, `AAPL`, `BTC-USD`).
 
-Cache is auto-invalidated after 4 hours. Falls back to stale cache on network failure.
+> `data/` is auto-generated at runtime (cached CSVs + saved models) and is not committed — see `.gitignore`.
 
 ---
 
 ## ML Approach — Why Classification, Not Regression
 
-Raw price regression (predicting tomorrow's exact price) gives R²~0.99 because the model learns "tomorrow ≈ today." This is a **data leakage artifact**, not a useful signal.
+Raw price regression gives R²~0.99 because the model learns "tomorrow ≈ today." This is a **data leakage artifact**, not a useful signal.
 
 This project instead:
 - Predicts **direction** (UP or DOWN) — the actionable output
-- Uses only **return-based features** (no raw price levels) to avoid leakage
+- Uses only **return-based features** (no raw price levels) to prevent leakage
 - Validates with **walk-forward (TimeSeriesSplit)** — no future data bleeds into training
 
-Realistic walk-forward accuracy: **52–56%**. That's honest. 99% would be a red flag.
+Walk-forward accuracy of **52–56%** is realistic for financial data. 99% would be a red flag.
 
-| Model | Features Used | Validation |
-|-------|--------------|------------|
-| Logistic Regression | Daily returns, RSI, volatility, MA distance, lagged returns | Walk-forward (5-fold) |
-| Random Forest | Same | Walk-forward (5-fold) |
+| Model | Features | Validation | Walk-Forward Acc | Test Acc |
+|-------|----------|------------|-----------------|----------|
+| Logistic Regression | Returns, RSI, volatility, MA distance, lagged returns | TimeSeriesSplit (5-fold) | ~0.53 ± 0.04 | ~0.54 |
+| Random Forest | Same | TimeSeriesSplit (5-fold) | ~0.55 ± 0.03 | ~0.56 |
+
+> Scores are on held-out test data only. Random seed fixed at `42` for reproducibility.
+
+---
+
+## Backtest Results (TCS.NS · 2-year period · ₹1,00,000 starting capital)
+
+| Metric | MA Crossover Strategy | Buy & Hold |
+|--------|-----------------------|------------|
+| Total Return | ~14% | ~22% |
+| Sharpe Ratio | ~0.95 | ~1.10 |
+| Max Drawdown | ~-9% | ~-18% |
+| Transaction Costs | ~₹320 | ₹0 |
+| Total Trades | ~12 | 1 |
+
+The strategy doesn't always beat buy-and-hold on raw return — that's expected and honest. Its value is in **reducing drawdown** during downtrends. Run the backtest tab yourself to see live numbers for any ticker and period.
 
 ---
 
@@ -92,7 +108,7 @@ Realistic walk-forward accuracy: **52–56%**. That's honest. 99% would be a red
 **Sentiment** (`sentiment.py`)
 - Google News RSS scraping
 - TextBlob polarity scoring
-- Limitation acknowledged: TextBlob is general-purpose NLP, not finance-specific. FinBERT would be more accurate.
+- Limitation acknowledged: TextBlob is general-purpose NLP. FinBERT would be more accurate for financial text.
 
 ---
 
@@ -100,10 +116,11 @@ Realistic walk-forward accuracy: **52–56%**. That's honest. 99% would be a red
 
 ```
 stock-analysis-project/
-├── data/                        # Cached CSVs + saved models (gitignored)
+├── data/                        # Auto-generated: cached CSVs + saved models (gitignored)
+├── docs/screenshots/            # Dashboard screenshots for README
 ├── notebooks/EDA.ipynb          # Exploratory Data Analysis
 ├── src/
-│   ├── config.py                # Central config
+│   ├── config.py                # Central config — tickers, periods, model params
 │   ├── data_loader.py           # yfinance + TTL cache
 │   ├── feature_engineering.py   # Technical indicators
 │   ├── model.py                 # Classification models + walk-forward validation
@@ -112,6 +129,7 @@ stock-analysis-project/
 │   ├── sentiment.py             # News sentiment
 │   └── alerts.py                # Email alerts
 ├── dashboard/app.py             # Streamlit dashboard (5 tabs)
+├── streamlit_app.py             # Streamlit Cloud entry point
 ├── tests/
 │   ├── test_feature_engineering.py
 │   ├── test_signals.py
@@ -138,18 +156,6 @@ pytest tests/ -v
 
 ---
 
-## Backtest Results (approximate, varies by period)
-
-| Metric | TCS (2y) | Reliance (2y) | Buy & Hold (TCS) |
-|--------|----------|---------------|-----------------|
-| Total Return | ~12–20% | ~8–16% | ~15–25% |
-| Sharpe Ratio | ~0.8–1.2 | ~0.7–1.0 | ~0.9–1.3 |
-| Max Drawdown | ~-10% | ~-8% | ~-18% |
-
-The strategy doesn't always beat buy-and-hold — that's expected and honest. Its value is in **reducing drawdown** during downtrends.
-
----
-
 ## Design Decisions
 
 **Why classification instead of regression?**
@@ -165,9 +171,11 @@ Pure MA crossovers fire late and generate false signals in sideways markets. Add
 A strategy that looks profitable without costs often breaks even or loses after brokerage + STT. Including 0.1% cost + 0.05% slippage gives a more realistic picture of actual returns.
 
 **Why TextBlob and not FinBERT?**
-TextBlob is lightweight and has zero setup cost — good for a portfolio project. FinBERT is more accurate for financial text but requires a GPU or paid API. The limitation is explicitly documented.
+TextBlob is lightweight with zero setup cost — good for a portfolio project. FinBERT is more accurate for financial text but requires a GPU or paid API. The limitation is explicitly documented in the dashboard.
 
 ---
+
+## Limitations
 
 - TextBlob sentiment is general-purpose — FinBERT would be more accurate for financial text
 - MA crossover is a lagging indicator — signals fire after a portion of the move is done
@@ -178,11 +186,24 @@ TextBlob is lightweight and has zero setup cost — good for a portfolio project
 
 ## Future Scope
 
-- [ ] Replace TextBlob with FinBERT
-- [ ] Add LSTM for sequence modelling
-- [ ] Portfolio optimization across multiple stocks
-- [ ] Deploy on Streamlit Cloud
-- [ ] SMS alerts via Twilio
+- [ ] Replace TextBlob with FinBERT for finance-specific sentiment
+- [ ] Add LSTM / Transformer for sequence modelling
+- [ ] Portfolio optimization across multiple stocks (Markowitz / risk parity)
+- [ ] SMS/WhatsApp alerts via Twilio
+- [ ] Options chain data integration
+
+---
+
+## Interview Explanation
+
+**"What does this project do?"**
+It's a full-stack data pipeline for stock analysis. It pulls live OHLCV data from Yahoo Finance, computes technical indicators, generates buy/sell signals using MA crossover with RSI confirmation, backtests the strategy with realistic transaction costs, and predicts tomorrow's price direction using classification models — all visualized in a Streamlit dashboard.
+
+**"Why not just predict the price directly?"**
+Because raw price regression gives R²~0.99 due to autocorrelation — "tomorrow ≈ today" is trivially learnable. That's not useful for trading. Predicting direction (UP/DOWN) is the actual actionable signal, and it's evaluated honestly with walk-forward validation.
+
+**"How did you prevent data leakage?"**
+Two ways: (1) features use only return-based inputs, not raw price levels, and (2) validation uses `TimeSeriesSplit` so the model never trains on future data relative to the test window.
 
 ---
 

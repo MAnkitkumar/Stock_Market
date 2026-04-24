@@ -76,8 +76,15 @@ def fetch_stock_data(ticker: str, period: str = "2y", interval: str = "1d",
     if df.empty:
         raise ValueError(f"No data returned for ticker: {ticker}")
 
+    # yfinance >=1.0 returns a MultiIndex (Price, Ticker) — flatten to single level
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
+
+    # Drop Adj Close if present (auto_adjust=True makes it redundant)
+    df = df.drop(columns=["Adj Close"], errors="ignore")
+
+    # Ensure standard column names
+    df.columns = [c.strip() for c in df.columns]
 
     # Only persist daily data to disk
     if not intraday:
